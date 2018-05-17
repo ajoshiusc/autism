@@ -21,6 +21,64 @@ data_train_functional.head()
 # Similarly to the anatomical data, the column `fmri_select` gives information about the manual quality check.
 data_train_functional['fmri_select'].head()
 
+
+import scipy as sp
+import numpy as np
+"""
+Created on Tue Jul 11 22:42:56 2017
+
+ """
+
+
+def normalizeData(pre_signal):
+    """
+     normed_signal, mean_vector, std_vector = normalizeData(pre_signal)
+     This function normalizes the input signal to have 0 mean and unit
+     variance in time.
+     pre_signal: Time x Original Vertices data
+     normed_signal: Normalized (Time x Vertices) signal
+     mean_vector: 1 x Vertices mean for each time series
+     norm_vector : 1 x Vertices norm for each time series
+    """
+
+    if sp.any(sp.isnan(pre_signal)):
+        print('there are NaNs in the data matrix, making them zero')
+
+    pre_signal[sp.isnan(pre_signal)] = 0
+    mean_vector = sp.mean(pre_signal, axis=0, keepdims=True)
+    normed_signal = pre_signal - mean_vector
+    norm_vector = sp.linalg.norm(normed_signal, axis=0, keepdims=True)
+    norm_vector[norm_vector == 0] = 1e-116
+    normed_signal = normed_signal / norm_vector
+
+    return normed_signal, mean_vector, norm_vector
+
+
+def brainSync(X, Y):
+    """
+   Input:
+       X - Time series of the reference data (Time x Vertex) \n
+       Y - Time series of the subject data (Time x Vertex)
+
+   Output:
+       Y2 - Synced subject data (Time x Vertex)\n
+       R - The orthogonal rotation matrix (Time x Time)
+
+   Please cite the following publication:
+       AA Joshi, M Chong, RM Leahy, BrainSync: An Orthogonal Transformation
+       for Synchronization of fMRI Data Across Subjects, Proc. MICCAI 2017,
+       in press.
+       """
+    if X.shape[0] > X.shape[1]:
+        print('The input is possibly transposed. Please check to make sure \
+that the input is time x vertices!')
+
+    C = np.dot(X, Y.T)
+    U, _, V = np.linalg.svd(C)
+    R = np.dot(U, V)
+    Y2 = np.dot(R, Y)
+    return Y2, R
+
 # The testing data can be loaded similarly as follows:
 
 from problem import get_test_data
@@ -68,22 +126,54 @@ from nilearn.connectome import ConnectivityMeasure
 
 def _load_fmri(fmri_filenames):
     """Load time-series extracted from the fMRI using a specific atlas."""
-#    print('Loading files')
+#    print(fmri_filenames.shape)
+#    print('rf')
     return np.array([pd.read_csv(subject_filename,
                                  header=None).values
                      for subject_filename in fmri_filenames])
+
+class BrainSyncTransform(BaseEstimator, TransformerMixin):    
+        def __init__(self, refdata=np.array([0])):
+            self.refdata = refdata
+        
+        def fit(self,X, y=None):
+            self.refdata=y
+            print(self.refdata.shape)
+            print('~~~~~~')
+
+            return self
+        def transform(self, X, y=None):
+            #print(self.refdata.shape)
+            print(self.refdata.shape)
+            print('++++')
+            for ind in range(len(X)):
+                print(X[ind].shape)
+                X[ind] = X[ind][:30,1]
+                print(X[ind].shape)#, _ = brainSync(X=self.refdata[:30,], Y=X[ind][:30,])
+                print(ind)
+
+            print(X.shape)
+            X=np.vstack(X)
+            print('WWW')
+            print(X.shape)
+#            if self.refdata.shape[0] == 1: 
+#                syn = X
+#            else:
+#                syn, _ = brainSync(X=self.refdata, Y=X)
+            return X
 
 class FeatureExtractor(BaseEstimator, TransformerMixin):
     def __init__(self):
         
         self.ref=0
+        self.refdata=np.array([0])
         # make a transformer which will load the time series and compute the
         # connectome matrix
-        
-        
+        #print('fe')
         self.transformer_fmri = make_pipeline(
-            FunctionTransformer(func=_load_fmri, validate=False),
-            ConnectivityMeasure(kind='covariance', vectorize=True))
+            FunctionTransformer(func=_load_fmri, validate=False) ,
+            BrainSyncTransform())
+#            ConnectivityMeasure(kind='covariance', vectorize=True))
         
     def fit(self, X_df, y):
         # get only the time series for the MSDL atlas
@@ -92,13 +182,22 @@ class FeatureExtractor(BaseEstimator, TransformerMixin):
         if self.ref == 0:
            self.ref = fmri_filenames[fmri_filenames.index[0]]
 
-        print(self.ref)
+#        print(self.ref)
+        self.refdata = pd.read_csv(self.ref, header=None).values
+#        print(self.refdata.shape)
+        self.refdata, _, _ = normalizeData(self.refdata)
         
-        self.transformer_fmri.fit(fmri_filenames, y)
+#        print(np.linalg.norm(x=refdata, axis=0))
+        
+        self.transformer_fmri.fit(fmri_filenames,self.refdata)
         return self
 
     def transform(self, X_df):
+        print(self.refdata.shape)
+        print('----')
+
         fmri_filenames = X_df['fmri_msdl']
+        print('fe')
         return self.transformer_fmri.transform(fmri_filenames)
 
 
