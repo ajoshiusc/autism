@@ -74,7 +74,8 @@ def brainSync(X, Y):
 that the input is time x vertices!')
 
     C = np.dot(X, Y.T)
-    U, _, V = np.linalg.svd(C)
+    C[~np.isfinite(C)] = 0.0000001
+    U, _, V = sp.linalg.svd(C)
     R = np.dot(U, V)
     Y2 = np.dot(R, Y)
     return Y2, R
@@ -98,7 +99,7 @@ def evaluation(X, y):
     cv = get_cv(X, y)
     results = cross_validate(pipe, X, y, scoring=['roc_auc', 'accuracy'], cv=cv,
                              verbose=1, return_train_score=True,
-                             n_jobs=1)
+                             n_jobs=10)
     return results
 
 # ### Going further: using fMRI-derived features
@@ -128,9 +129,17 @@ def _load_fmri(fmri_filenames):
     """Load time-series extracted from the fMRI using a specific atlas."""
 #    print(fmri_filenames.shape)
 #    print('rf')
-    return np.array([pd.read_csv(subject_filename,
+    a= np.array([pd.read_csv(subject_filename,
                                  header=None).values
                      for subject_filename in fmri_filenames])
+    Z=np.zeros((500,a[0].shape[1]))
+
+    for i in range(len(a)):
+        Z[:a[i].shape[0],:]=a[i]
+        a[i]=Z[:90,]
+        Z=0*Z
+    
+    return a
 
 class BrainSyncTransform(BaseEstimator, TransformerMixin):    
         def __init__(self, refdata=np.array([0])):
@@ -147,9 +156,10 @@ class BrainSyncTransform(BaseEstimator, TransformerMixin):
             print(self.refdata.shape)
             print('++++')
             for ind in range(len(X)):
-                print(X[ind].shape)
-                X[ind] = X[ind][:30,1]
-                print(X[ind].shape)#, _ = brainSync(X=self.refdata[:30,], Y=X[ind][:30,])
+#                X[ind]=np.dot(X[ind].T,X[ind])
+#                print(X[ind].shape)
+                X[ind], _ = brainSync(X=self.refdata, Y=X[ind])
+                X[ind] = X[ind].flatten()#[:30,1]
                 print(ind)
 
             print(X.shape)
@@ -183,7 +193,11 @@ class FeatureExtractor(BaseEstimator, TransformerMixin):
            self.ref = fmri_filenames[fmri_filenames.index[0]]
 
 #        print(self.ref)
-        self.refdata = pd.read_csv(self.ref, header=None).values
+        aa = pd.read_csv(self.ref, header=None).values
+        Z=np.zeros((500,aa.shape[1]))
+        Z[:aa.shape[0],:]=aa
+        self.refdata=Z[:90,]
+
 #        print(self.refdata.shape)
         self.refdata, _, _ = normalizeData(self.refdata)
         
