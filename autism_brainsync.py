@@ -86,7 +86,7 @@ from problem import get_test_data
 
 data_test, labels_test = get_test_data()
 data_test.head()
-a=data_test['fmri_msdl']
+a=data_test['fmri_basc197']
 
 # ### Evaluation
 # The framework is evaluated with a cross-validation approach. The metrics used are the AUC under the ROC and the accuracy.
@@ -107,7 +107,7 @@ def evaluation(X, y):
 # We pointed out that the available feature for fMRI are filename to the time-series. In order to limit the amount of data to be downloaded, we provide a fetcher `fetch_fmri_time_series()` to download only the time-series linked to a specific atlases.
 
 from download_data import fetch_fmri_time_series
-fetch_fmri_time_series(atlas='msdl')
+fetch_fmri_time_series(atlas='basc197')
 
 # You can download all atlases at once by passing `atlas='all'`. It is also possible to execute the file as a script `python download_data.py all`.
 
@@ -123,95 +123,69 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import FunctionTransformer
 
 from nilearn.connectome import ConnectivityMeasure
+TRUNC = 200
 
 
 def _load_fmri(fmri_filenames):
     """Load time-series extracted from the fMRI using a specific atlas."""
-#    print(fmri_filenames.shape)
-#    print('rf')
-    a= np.array([pd.read_csv(subject_filename,
-                                 header=None).values
-                     for subject_filename in fmri_filenames])
-    Z=np.zeros((500,a[0].shape[1]))
+    a = np.array([pd.read_csv(subject_filename,
+                              header=None).values
+                  for subject_filename in fmri_filenames])
+    Z = np.zeros((500, a[0].shape[1]))
 
     for i in range(len(a)):
-        Z[:a[i].shape[0],:]=a[i]
-        a[i]=Z[:90,]
-        Z=0*Z
-    
+        Z[:a[i].shape[0], :] = a[i]
+        a[i] = Z[:TRUNC, ]
+        Z = 0*Z
+
     return a
 
-class BrainSyncTransform(BaseEstimator, TransformerMixin):    
+
+class BrainSyncTransform(BaseEstimator, TransformerMixin):
         def __init__(self, refdata=np.array([0])):
             self.refdata = refdata
-        
-        def fit(self,X, y=None):
-            self.refdata=y
-            print(self.refdata.shape)
-            print('~~~~~~')
+
+        def fit(self, X, y=None):
+            self.refdata = y
 
             return self
-        def transform(self, X, y=None):
-            #print(self.refdata.shape)
-            print(self.refdata.shape)
-            print('++++')
-            for ind in range(len(X)):
-#                X[ind]=np.dot(X[ind].T,X[ind])
-#                print(X[ind].shape)
-                X[ind], _ = brainSync(X=self.refdata, Y=X[ind])
-                X[ind] = X[ind].flatten()#[:30,1]
-                print(ind)
 
-            print(X.shape)
-            X=np.vstack(X)
-            print('WWW')
-            print(X.shape)
-#            if self.refdata.shape[0] == 1: 
-#                syn = X
-#            else:
-#                syn, _ = brainSync(X=self.refdata, Y=X)
+        def transform(self, X, y=None):
+            for ind in range(len(X)):
+                X[ind], _ = brainSync(X=self.refdata, Y=X[ind])
+                X[ind] = X[ind].flatten()
+
+            X = np.vstack(X)
+
             return X
+
 
 class FeatureExtractor(BaseEstimator, TransformerMixin):
     def __init__(self):
-        
-        self.ref=0
-        self.refdata=np.array([0])
-        # make a transformer which will load the time series and compute the
-        # connectome matrix
-        #print('fe')
+
+        self.ref = 0
+        self.refdata = np.array([0])
         self.transformer_fmri = make_pipeline(
-            FunctionTransformer(func=_load_fmri, validate=False) ,
+            FunctionTransformer(func=_load_fmri, validate=False),
             BrainSyncTransform())
-#            ConnectivityMeasure(kind='covariance', vectorize=True))
-        
+
     def fit(self, X_df, y):
         # get only the time series for the MSDL atlas
-        
-        fmri_filenames = X_df['fmri_msdl']
+
+        fmri_filenames = X_df['fmri_basc197']
         if self.ref == 0:
-           self.ref = fmri_filenames[fmri_filenames.index[0]]
+            self.ref = fmri_filenames[fmri_filenames.index[0]]
 
-#        print(self.ref)
         aa = pd.read_csv(self.ref, header=None).values
-        Z=np.zeros((500,aa.shape[1]))
-        Z[:aa.shape[0],:]=aa
-        self.refdata=Z[:90,]
-
-#        print(self.refdata.shape)
+        Z = np.zeros((500, aa.shape[1]))
+        Z[:aa.shape[0], :] = aa
+        self.refdata = Z[:TRUNC, ]
         self.refdata, _, _ = normalizeData(self.refdata)
-        
-#        print(np.linalg.norm(x=refdata, axis=0))
-        
-        self.transformer_fmri.fit(fmri_filenames,self.refdata)
+        self.transformer_fmri.fit(fmri_filenames, self.refdata)
         return self
 
     def transform(self, X_df):
-        print(self.refdata.shape)
-        print('----')
-
-        fmri_filenames = X_df['fmri_msdl']
-        print('fe')
+        fmri_filenames = X_df['fmri_basc197']
         return self.transformer_fmri.transform(fmri_filenames)
 
 
@@ -231,7 +205,7 @@ class Classifier(BaseEstimator):
     def fit(self, X, y):
         self.clf.fit(X, y)
         return self
-       
+
     def predict(self, X):
         return self.clf.predict(X)
 
