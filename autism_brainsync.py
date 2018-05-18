@@ -125,7 +125,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import FunctionTransformer
 
 from nilearn.connectome import ConnectivityMeasure
-TRUNC = 200
+TRUNC = 150
 
 
 def _load_fmri(fmri_filenames):
@@ -188,8 +188,18 @@ class FeatureExtractor(BaseEstimator, TransformerMixin):
 
     def transform(self, X_df):
         fmri_filenames = X_df['fmri_basc197']
-        return self.transformer_fmri.transform(fmri_filenames)
 
+        X_fmri = self.transformer_fmri.transform(fmri_filenames)
+
+        X_fmri = pd.DataFrame(X_fmri, index=X_df.index)
+        X_fmri.columns = ['connectome_{}'.format(i)
+                                for i in range(X_fmri.columns.size)]
+        # get the anatomical information
+        X_anatomy = X_df[[col for col in X_df.columns
+                          if col.startswith('anatomy')]]
+        X_anatomy = X_anatomy.drop(columns='anatomy_select')
+        # concatenate both matrices
+        return pd.concat([X_fmri, X_anatomy], axis=1)
 
 
 from sklearn.base import BaseEstimator
