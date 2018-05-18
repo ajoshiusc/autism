@@ -69,10 +69,12 @@ def brainSync(X, Y):
        for Synchronization of fMRI Data Across Subjects, Proc. MICCAI 2017,
        in press.
        """
-    if X.shape[0] > X.shape[1]:
-        print('The input is possibly transposed. Please check to make sure \
-that the input is time x vertices!')
-
+# =============================================================================
+#     if X.shape[0] > X.shape[1]:
+#         print('The input is possibly transposed. Please check to make sure \
+# that the input is time x vertices!')
+#
+# =============================================================================
     C = np.dot(X, Y.T)
     C[~np.isfinite(C)] = 0.0000001
     U, _, V = sp.linalg.svd(C)
